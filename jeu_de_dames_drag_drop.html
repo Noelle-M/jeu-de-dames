@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeu de Dames - Capture Multiple et Dame</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            transition: background-color 0.5s ease;
+        }
+        .preboard{
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-left: auto;
+            margin-right: auto;
+            border: 2px solid brown;
+            box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.5);
+            height: 500px;
+            width: 500px;
+            background-color: black;
+        }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            gap: 2px;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .black {
+            background-color: brown;
+        }
+        .white {
+            background-color: beige;
+        }
+        .piece {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+        .black-piece {
+            background-color: black;
+            border: 2px solid red;
+        }
+        .white-piece {
+            background-color: white;
+        }
+        .black-dame {
+            background-color: black;
+            border: 2px solid yellow;
+        }
+        .white-dame {
+            background-color: white;
+            border: 2px solid yellow;
+        }
+        #scoreboard {
+            margin-top: 20px;
+            text-align: center;
+            color: darkorange;
+        }
+        #message {
+            margin-top: 10px;
+            font-weight: bold;
+            color: red;
+            text-align: center;
+        }
+        #turn-message {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #victory-message {
+            font-size: 36px;
+            font-weight: bold;
+            text-align: center;
+            color: gold;
+            display: none; /* Masqué au départ */
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">Jeu de Dames - Capture Multiple et Dame</h1>
+    <div id="turn-message"></div>
+    <div class="preboard">
+    <div id="board"></div>
+</div>
+    <div id="scoreboard">
+        <p>Noirs : <span id="black-score">0</span></p>
+        <p>Blancs : <span id="white-score">0</span></p>
+    </div>
+    <div id="message"></div>
+    <div id="victory-message">Victoire des !</div> <!-- Message de victoire en or -->
+
+    <script>
+        const board = document.getElementById('board');
+        const turnMessage = document.getElementById('turn-message');
+        const victoryMessage = document.getElementById('victory-message');
+        let blackScore = 0;
+        let whiteScore = 0;
+        let currentPlayer = 'N'; // Les Noirs commencent
+        let capturingPiece = null; // Pièce en cours de capture
+        let mustCapture = false; // Détecter si une capture multiple est possible
+        let gameOver = false; // Pour indiquer si le jeu est terminé
+
+        const initialBoard = [
+            [' ', 'B', ' ', 'B', ' ', 'B', ' ', 'B'],
+            ['B', ' ', 'B', ' ', 'B', ' ', 'B', ' '],
+            [' ', 'B', ' ', 'B', ' ', 'B', ' ', 'B'],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            ['N', ' ', 'N', ' ', 'N', ' ', 'N', ' '],
+            [' ', 'N', ' ', 'N', ' ', 'N', ' ', 'N'],
+            ['N', ' ', 'N', ' ', 'N', ' ', 'N', ' ']
+        ];
+
+        function createBoard() {
+            board.innerHTML = ''; // Réinitialiser le plateau
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+
+                    if ((row + col) % 2 === 1) {
+                        cell.classList.add('black');
+                    } else {
+                        cell.classList.add('white');
+                    }
+
+                    if (initialBoard[row][col] !== ' ') {
+                        const piece = document.createElement('div');
+                        piece.classList.add('piece');
+                        if (initialBoard[row][col] === 'N') {
+                            piece.classList.add('black-piece');
+                        } else if (initialBoard[row][col] === 'B') {
+                            piece.classList.add('white-piece');
+                        }
+                        piece.setAttribute('draggable', 'true');
+                        piece.dataset.player = initialBoard[row][col];
+                        piece.addEventListener('dragstart', handleDragStart);
+                        cell.appendChild(piece);
+                    }
+
+                    cell.addEventListener('dragover', handleDragOver);
+                    cell.addEventListener('drop', handleDrop);
+
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        function displayMessage(message) {
+            document.getElementById('message').textContent = message;
+        }
+
+        function handleDragStart(e) {
+            if (gameOver) return; // Si la partie est terminée, on ne fait rien
+            const row = e.target.parentNode.dataset.row;
+            const col = e.target.parentNode.dataset.col;
+            e.dataTransfer.setData('text/plain', row + ',' + col);
+            capturingPiece = e.target; // Conserver la pièce qui capture
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+        }
+
+        function handleDrop(e) {
+            if (gameOver) return; // Si la partie est terminée, on ne fait rien
+            e.preventDefault();
+            const [startRow, startCol] = e.dataTransfer.getData('text/plain').split(',').map(Number);
+            const targetRow = Number(e.target.dataset.row);
+            const targetCol = Number(e.target.dataset.col);
+
+            if (canMove(startRow, startCol, targetRow, targetCol)) {
+                movePiece(startRow, startCol, targetRow, targetCol);
+
+                if (hasCaptured(startRow, startCol, targetRow, targetCol)) {
+                    if (canCaptureMore(targetRow, targetCol)) {
+                        mustCapture = true;
+                        capturingPiece.parentNode.dataset.row = targetRow;
+                        capturingPiece.parentNode.dataset.col = targetCol;
+                        displayMessage("Capture multiple possible. Continuez à capturer !");
+                    } else {
+                        mustCapture = false;
+                        switchPlayer();
+                    }
+                } else {
+                    if (!mustCapture) {
+                        switchPlayer();
+                    }
+                }
+
+                checkForWinner(); // Vérifier s'il y a un gagnant après chaque mouvement
+            } else {
+                displayMessage("Coup invalide.");
+            }
+        }
+
+        function canMove(startRow, startCol, targetRow, targetCol) {
+            const piece = capturingPiece.classList;
+            const isDame = piece.contains('black-dame') || piece.contains('white-dame');
+            const isCaptureMove = Math.abs(startRow - targetRow) > 1; // Si déplacement de plus d'une case
+
+            // Gestion de la dame : elle peut se déplacer librement en diagonale
+            if (isDame) {
+                if (Math.abs(startRow - targetRow) === Math.abs(startCol - targetCol)) {
+                    const stepRow = (targetRow - startRow) / Math.abs(targetRow - startRow);
+                    const stepCol = (targetCol - startCol) / Math.abs(targetCol - startCol);
+                    let captured = false;
+
+                    for (let i = 1; i < Math.abs(targetRow - startRow); i++) {
+                        const checkRow = startRow + i * stepRow;
+                        const checkCol = startCol + i * stepCol;
+
+                        if (initialBoard[checkRow][checkCol] !== ' ') {
+                            const piece = initialBoard[checkRow][checkCol];
+                            if ((piece === 'B' && currentPlayer === 'N') || (piece === 'N' && currentPlayer === 'B')) {
+                                removePiece(checkRow, checkCol); // Capture la pièce (pion ou dame)
+                                captured = true;
+                            } else {
+                                return false;
+                            }
+                        }
+                    }
+
+                    if (initialBoard[targetRow][targetCol] === ' ' && (!isCaptureMove || captured)) {
+                        return true; // Mouvement valide si la case d'arrivée est vide
+                    }
+                }
+                return false;
+            }
+
+            // Gestion des pions
+            const direction = currentPlayer === 'N' ? -1 : 1;
+            const isMovingForward = (targetRow - startRow) === direction;
+            const isValidMove = initialBoard[targetRow][targetCol] === ' ' && Math.abs(startCol - targetCol) === 1;
+
+            if (isMovingForward && isValidMove) {
+                return true;
+            }
+
+            // Déplacement pour capture (pions)
+            if (isCaptureMove) {
+                const middleRow = (startRow + targetRow) / 2;
+                const middleCol = (startCol + targetCol) / 2;
+                const middlePiece = initialBoard[middleRow][middleCol];
+
+                if ((middlePiece === 'B' && currentPlayer === 'N') || (middlePiece === 'N' && currentPlayer === 'B')) {
+                    removePiece(middleRow, middleCol);
+                    updateScore(currentPlayer);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        function hasCaptured(startRow, startCol, targetRow, targetCol) {
+            return Math.abs(startRow - targetRow) === 2 || capturingPiece.classList.contains('black-dame') || capturingPiece.classList.contains('white-dame');
+        }
+
+        function updateScore(player) {
+            if (player === 'N') {
+                blackScore++;
+                document.getElementById('black-score').textContent = blackScore;
+            } else {
+                whiteScore++;
+                document.getElementById('white-score').textContent = whiteScore;
+            }
+        }
+
+        function promoteToDame(row, piece) {
+            if (currentPlayer === 'N' && row === 0) {
+                piece.classList.remove('black-piece');
+                piece.classList.add('black-dame');
+                displayMessage("Promotion en dame !");
+            } else if (currentPlayer === 'B' && row === 7) {
+                piece.classList.remove('white-piece');
+                piece.classList.add('white-dame');
+                displayMessage("Promotion en dame !");
+            }
+        }
+
+        function canCaptureMore(row, col) {
+            const directions = [
+                { r: -2, c: -2 },
+                { r: -2, c: 2 },
+                { r: 2, c: -2 },
+                { r: 2, c: 2 }
+            ];
+
+            for (const dir of directions) {
+                const newRow = row + dir.r;
+                const newCol = col + dir.c;
+                const middleRow = (row + newRow) / 2;
+                const middleCol = (col + newCol) / 2;
+
+                if (
+                    newRow >= 0 && newRow < 8 &&
+                    newCol >= 0 && newCol < 8 &&
+                    initialBoard[newRow][newCol] === ' ' &&
+                    ((initialBoard[middleRow][middleCol] === 'B' && currentPlayer === 'N') ||
+                    (initialBoard[middleRow][middleCol] === 'N' && currentPlayer === 'B'))
+                ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function movePiece(startRow, startCol, targetRow, targetCol) {
+            const piece = document.querySelector(`[data-row='${startRow}'][data-col='${startCol}'] .piece`);
+            const targetCell = document.querySelector(`[data-row='${targetRow}'][data-col='${targetCol}']`);
+            targetCell.appendChild(piece);
+
+            initialBoard[targetRow][targetCol] = initialBoard[startRow][startCol];
+            initialBoard[startRow][startCol] = ' ';
+            
+            promoteToDame(targetRow, piece); // Vérifier si le pion doit être promu en dame
+        }
+
+        function removePiece(row, col) {
+            const pieceToRemove = document.querySelector(`[data-row='${row}'][data-col='${col}'] .piece`);
+            if (pieceToRemove) {
+                pieceToRemove.remove();
+            }
+            initialBoard[row][col] = ' ';
+        }
+
+        function switchPlayer() {
+            currentPlayer = currentPlayer === 'N' ? 'B' : 'N';
+            updateTurnMessage(); // Mettre à jour le message du joueur et le background
+        }
+
+        function updateTurnMessage() {
+            if (currentPlayer === 'N') {
+                document.body.style.backgroundColor = 'black';
+                turnMessage.style.color = 'white';
+                turnMessage.textContent = "C'est au tour des Noirs de jouer";
+            } else {
+                document.body.style.backgroundColor = 'white';
+                turnMessage.style.color = 'black';
+                turnMessage.textContent = "C'est au tour des Blancs de jouer";
+            }
+        }
+
+        function checkForWinner() {
+            const blackPieces = document.querySelectorAll('.black-piece, .black-dame').length;
+            const whitePieces = document.querySelectorAll('.white-piece, .white-dame').length;
+
+            if (blackPieces === 0) {
+                declareWinner('Blancs');
+            } else if (whitePieces === 0) {
+                declareWinner('Noirs');
+            }
+        }
+
+        function declareWinner(winner) {
+            gameOver = true; // Le jeu est terminé
+            victoryMessage.textContent = `Victoire des ${winner} !`;
+            victoryMessage.style.display = 'block'; // Afficher le message de victoire en or
+            displayMessage('Le jeu est terminé.');
+        }
+
+        createBoard();
+        updateTurnMessage(); // Afficher le premier message
+    </script>
+</body>
+</html>
